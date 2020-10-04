@@ -3,13 +3,12 @@ package reyst.gsihome
 import android.util.Log
 import android.util.SparseArray
 import android.view.View
-import androidx.core.view.marginBottom
-import androidx.core.view.marginEnd
-import androidx.core.view.marginStart
-import androidx.core.view.marginTop
+import androidx.core.util.forEach
 import androidx.recyclerview.widget.RecyclerView
 
 class CyclicHorizontalLayoutManager : RecyclerView.LayoutManager() {
+
+    private val viewCache = SparseArray<View>()
 
     override fun canScrollHorizontally(): Boolean = true
     override fun canScrollVertically(): Boolean = false
@@ -25,7 +24,28 @@ class CyclicHorizontalLayoutManager : RecyclerView.LayoutManager() {
 
     override fun onLayoutChildren(recycler: RecyclerView.Recycler, state: RecyclerView.State) {
         Log.wtf("INSPECT", "onLayoutChildren state: $state")
+        detachAndScrapAttachedViews(recycler)
+        initCache()
         fillDown(recycler)
+        recycleCache(recycler)
+    }
+
+    private fun initCache() {
+        viewCache.clear()
+        (0 until childCount)
+            .mapNotNull { getChildAt(it) }
+            .forEach { viewCache.put(getPosition(it), it) }
+
+        viewCache.forEach { _, view -> detachView(view) }
+    }
+
+    private fun recycleCache(recycler: RecyclerView.Recycler) {
+        viewCache.forEach { _, view -> recycler.recycleView(view) }
+    }
+
+    override fun scrollHorizontallyBy(dx: Int, recycler: RecyclerView.Recycler?, state: RecyclerView.State?): Int {
+        offsetChildrenHorizontal(-dx)
+        return dx
     }
 
     private fun fillDown(recycler: RecyclerView.Recycler) {
@@ -34,20 +54,27 @@ class CyclicHorizontalLayoutManager : RecyclerView.LayoutManager() {
         var fillDown = true
         var viewStart = 0
 
-        while (fillDown && pos < itemCount) {
-            val view = recycler.getViewForPosition(pos)
-            addView(view)
-            measureChildWithMargins(view, 0, 0)
+        while (fillDown) { //  && pos < itemCount
 
-            layoutDecorated(
-                view,
-                viewStart + getDecoratedLeft(view) + view.marginStart,
-                getDecoratedTop(view) + view.marginTop,
-                viewStart + getDecoratedMeasuredWidth(view) + view.marginEnd,
-                getDecoratedMeasuredHeight(view) //+ view.marginBottom
-            )
+            val view = viewCache[pos] ?: recycler.getViewForPosition(pos % itemCount)
 
-            viewStart = getDecoratedRight(view) + view.marginEnd
+            if (viewCache[pos] == null) {
+                addView(view)
+                measureChildWithMargins(view, 0, 0)
+
+                layoutDecorated(
+                    view,
+                    viewStart, // + getDecoratedLeft(view),
+                    getDecoratedTop(view),
+                    viewStart + getDecoratedMeasuredWidth(view),
+                    getDecoratedMeasuredHeight(view)
+                )
+            } else {
+                attachView(view)
+                viewCache.remove(pos)
+            }
+
+            viewStart = getDecoratedRight(view)
             fillDown = viewStart <= width
             pos++
         }
