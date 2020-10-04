@@ -11,7 +11,7 @@ class NumberAdapter : RecyclerView.Adapter<NumberVH>() {
     }
 
     override fun onBindViewHolder(holder: NumberVH, position: Int) {
-        holder.bind(position + 1)
+        holder.bind(position)
     }
 
     override fun getItemCount(): Int = 10
